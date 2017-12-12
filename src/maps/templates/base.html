@@ -1,0 +1,164 @@
+{% load static from staticfiles %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>Sherpany map</title>
+    <style>
+        #map {
+            height: 100%;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        table.locations {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        .reset-all {
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="map" data-fusion-table_name="{{ FUSION_TABLE_NAME }}"></div>
+{% csrf_token %}
+
+<table class="locations">
+    <thead>
+        <th>Latitude</th>
+        <th>Longitude</th>
+        <th>Address</th>
+    </thead>
+    <tbody>
+    {% for loc in locations %}
+        <tr>
+            <td>{{loc.lat}}</td>
+            <td>{{loc.lon}}</td>
+            <td>{{loc.address}}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<button class="reset-all">Click to reset all data (this will delete all locations)</button>
+
+<script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}" type="text/javascript"></script>
+<script type="text/javascript">
+$(document).ready(function(){
+    //global map
+    var map;
+
+    function onMapClick(event) {
+        // map passes as data
+        var latLng = event.latLng;
+
+        marker = new google.maps.Marker({position: latLng, map: map});
+
+        /*
+        get address from latitude/longitude
+        */
+        var geocoder = new google.maps.Geocoder;
+        geocoder.geocode({'location': latLng}, function(results, status) {
+            if (status === 'OK' && results[0]) {
+                // address seems correct
+                address = results[0].formatted_address;
+
+                var url = '/api/location/';
+                var params = {
+                    lat: latLng.lat(),
+                    lon: latLng.lng(),
+                    address: address,
+                };
+                $.ajax({
+                    url: url,
+                    data: params,
+                    method: "POST",
+                    beforeSend: function(xhr) {
+                        var csrf = $("[name=csrfmiddlewaretoken]").val();
+                        xhr.setRequestHeader("X-CSRFToken", csrf);
+                    }
+                })
+                .done(function(data) {
+                    if (data === 'ok') {
+                        initFusionTablesLayer();
+                        addLocationUI(params);
+                    }
+                })
+
+            } else {
+                // no results
+                return;
+            }
+        });
+    }
+    function initFusionTablesLayer() {
+        // overlay fusion tables data
+        var table = $('#map').attr('data-fusion-table-name');
+        var layer = new google.maps.FusionTablesLayer({
+            query: {
+                select: '*',
+                from: table
+            },
+            map: map
+        });
+    }
+    function initMap() {
+        // global map
+        map = new google.maps.Map(document.getElementById('map'), {
+            // starting coordinates: dont forget to have some fun ;)
+            center: new google.maps.LatLng(47.3878445, 8.5180902),
+            zoom: 17,
+            mapTypeId: google.maps.MapTypeId.ROADMAP
+        });
+        initFusionTablesLayer()
+
+        google.maps.event.addListener(map, 'click', onMapClick);
+    }
+    function refreshPage() {
+        //simply reload the page to show the updated map
+        // no cache of any
+        window.location.reload(true);
+    }
+    function addLocationUI(params) {
+        // we change the DOM to refresh contents without a reload
+        // or an ajax request
+        // on the next reload this will be loaded from the server
+        var tr = '<tr>';
+        tr += '<td>' + params.lat + '</td>;'
+        tr += '<td>' + params.lon + '</td>;'
+        tr += '<td>' + params.address + '</td>;'
+        tr += '</tr>';
+
+        $('table.locations tbody').append($(tr));
+    }
+    function resetAll() {
+        var url = '/api/reset/'
+        $.ajax({
+            url: url,
+            method: "POST",
+            beforeSend: function (xhr) {
+                var csrf = $("[name=csrfmiddlewaretoken]").val();
+                xhr.setRequestHeader("X-CSRFToken", csrf);
+            }
+        })
+        .done(function (data) {
+            if (data === 'ok') {
+                refreshPage();
+            }
+        })
+    }
+
+    google.maps.event.addDomListener(window, 'load', initMap);
+    $('.reset-all').on('click', resetAll)
+});
+</script>
+</body>
+</html>
