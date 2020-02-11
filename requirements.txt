@@ -1,7 +1,7 @@
 apiclient==1.0.3
 certifi==2017.7.27.1
 chardet==3.0.4
-Django==1.9
+Django==1.11.28
 google-api-python-client==1.6.4
 httplib2==0.10.3
 idna==2.6
